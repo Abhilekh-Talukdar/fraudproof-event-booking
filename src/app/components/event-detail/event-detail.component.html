@@ -1,0 +1,22 @@
+<ng-container *ngIf="event$ | async as event; else loadingOrNotFound">
+    <div class="event-detail-card">
+      <h2>{{ event.name }}</h2>
+      <p><strong>Date:</strong> {{ event.date }}</p>
+      <p><strong>Location:</strong> {{ event.location }}</p>
+      <p><strong>Description:</strong> {{ event.description }}</p>
+      <p *ngIf="event.price"><strong>Price:</strong> ${{ event.price }}</p>
+      <p *ngIf="!event.price"><strong>Price:</strong> Free</p>
+  
+      <button (click)="bookNow(event.id)" class="book-button">Book Now (Simulated)</button>
+      <button (click)="goBack()" class="back-button">Back to List</button>
+  
+      <div *ngIf="bookingMessage" class="booking-message">
+        {{ bookingMessage }}
+      </div>
+    </div>
+  </ng-container>
+  
+  <ng-template #loadingOrNotFound>
+    <p>Loading event details or event not found...</p>
+    <button (click)="goBack()" class="back-button">Back to List</button>
+  </ng-template>

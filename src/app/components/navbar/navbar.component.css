@@ -1,0 +1,38 @@
+/* src/app/components/navbar/navbar.component.css */
+.navbar {
+    background-color: #333;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+  
+.navbar-brand {
+    color: white;
+    text-decoration: none;
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+.navbar-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+}
+
+.navbar-links li {
+    margin-left: 20px;
+}
+
+.navbar-links a {
+    color: #ccc;
+    text-decoration: none;
+    font-size: 1em;
+}
+
+.navbar-links a:hover,
+.navbar-links a.active-link {
+    color: white;
+    font-weight: bold;
+}
