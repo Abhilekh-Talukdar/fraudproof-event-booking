@@ -1,6 +1,6 @@
 import { NgModule } from '@angular/core';
 import { BrowserModule, provideClientHydration, withEventReplay } from '@angular/platform-browser';
-
+import { provideHttpClient } from '@angular/common/http'; // Import HttpClientModule   
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { EventListComponent } from './components/event-list/event-list.component';
@@ -16,10 +16,11 @@ import { NavbarComponent } from './components/navbar/navbar.component';
   ],
   imports: [
     BrowserModule,
-    AppRoutingModule
+    AppRoutingModule,
   ],
   providers: [
-    provideClientHydration(withEventReplay())
+    provideClientHydration(withEventReplay()),
+    provideHttpClient(), // Provide HttpClient
   ],
   bootstrap: [AppComponent]
 })

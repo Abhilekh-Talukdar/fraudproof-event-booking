@@ -1,1 +1,13 @@
-/* You can add global styles to this file, and also import other style files */
+/* src/styles.css (or your global stylesheet) */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto; /* Center the main content area */
+}
