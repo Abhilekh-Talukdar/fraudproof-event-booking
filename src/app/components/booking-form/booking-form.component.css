@@ -1,0 +1,104 @@
+/* src/app/components/booking-form/booking-form.component.css */
+.booking-form-container {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px auto;
+    background-color: #f9f9f9;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+    max-width: 700px;
+}
+
+.back-button {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 15px;
+}
+.back-button:hover {
+    background-color: #5a6268;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box; /* Include padding in width */
+}
+
+/* Style for dynamically added ticket groups */
+.ticket-form-group {
+    border: 1px dashed #ddd;
+    padding: 15px;
+    margin-top: 15px;
+    border-radius: 5px;
+    background-color: #fff;
+}
+.ticket-form-group h4 {
+    margin-top: 0;
+    color: #555;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+}
+
+.invalid-feedback {
+    color: #dc3545; /* Red for errors */
+    font-size: 0.85em;
+    margin-top: 4px;
+}
+
+input.ng-invalid.ng-touched,
+select.ng-invalid.ng-touched {
+  border-color: #dc3545; /* Red border for invalid touched fields */
+}
+
+.submit-button {
+    background-color: #28a745;
+    color: white;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.1em;
+    margin-top: 10px;
+}
+.submit-button:hover {
+    background-color: #218838;
+}
+.submit-button:disabled {
+    background-color: #aaa;
+    cursor: not-allowed;
+}
+
+.alert {
+    padding: 10px 15px;
+    margin-top: 15px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+}
+.alert-danger {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+.alert-success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+.mt-3 { margin-top: 1rem !important; }

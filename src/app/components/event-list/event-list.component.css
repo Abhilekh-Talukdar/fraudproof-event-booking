@@ -15,13 +15,23 @@
   
   .event-card h3 {
     margin-top: 0;
+    height: 44px;
     color: #333;
+    text-overflow: ellipsis;
   }
   
   .event-card p {
       margin-bottom: 8px;
       font-size: 0.9em;
       color: #555;
+  }
+
+  .event-card .event-desc {
+      color: #777;
+      margin-bottom: 12px;
+      height: 52px;
+      overflow: hidden;
+      text-overflow: ellipsis;
   }
   
   .details-button {

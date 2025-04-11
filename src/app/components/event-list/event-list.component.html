@@ -1,6 +1,6 @@
 <h2>Available Events</h2>
 <div *ngIf="!events.length">
-  <p>Loading events or no events available...</p>
+  <p>No events available...</p>
 </div>
 
 <div class="event-list-container" *ngIf="events.length">
@@ -8,8 +8,8 @@
     <h3>{{ event.name }}</h3>
     <p><strong>Date:</strong> {{ event.date }}</p>
     <p><strong>Location:</strong> {{ event.location }}</p>
-    <p>{{ event.description }}</p>
-    <p *ngIf="event.price"><strong>Price:</strong> ${{ event.price }}</p>
+    <p class="event-desc">{{ event.description }}</p>
+    <p *ngIf="event.price"><strong>Price:</strong> ₹{{ event.price }}</p>
     <p *ngIf="!event.price"><strong>Price:</strong> Free</p>
     <a [routerLink]="['/events', event.id]" class="details-button">View Details</a>
   </div>

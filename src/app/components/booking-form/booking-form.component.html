@@ -1,0 +1,53 @@
+<div class="booking-form-container">
+    <button (click)="goBack()" class="back-button">&larr; Back to Event Details</button>
+
+    <div *ngIf="isLoading && !event$">Loading event details...</div>
+    <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+    <ng-container *ngIf="event$ | async as event">
+        <h2>Book Tickets for: {{ event.name }}</h2>
+        <p><strong>Date:</strong> {{ event.date }} | <strong>Location:</strong> {{ event.location }}</p>
+        <p *ngIf="event.price"><strong>Price per ticket:</strong> ${{ event.price }}</p>
+        <p *ngIf="!event.price"><strong>Price per ticket:</strong> Free</p>
+
+        <form [formGroup]="bookingForm" (ngSubmit)="onSubmit()">
+            <div class="form-group">
+                <label for="numberOfTickets">Number of Tickets (Max {{ maxTickets }}):</label>
+                <select id="numberOfTickets" formControlName="numberOfTickets" class="form-control">
+                    <option *ngFor="let num of numberOfTicketsOptions" [value]="num">{{ num }}</option>
+                </select>
+                <div *ngIf="bookingForm.get('numberOfTickets')?.invalid && bookingForm.get('numberOfTickets')?.touched" class="invalid-feedback">
+                    Please select between 1 and {{ maxTickets }} tickets.
+                </div>
+            </div>
+
+            <div formArrayName="tickets">
+                <div *ngFor="let ticket of ticketsFormArray.controls; let i=index" [formGroupName]="i" class="ticket-form-group">
+                    <h4>Ticket {{ i + 1 }} Details</h4>
+                    <div class="form-group">
+                        <label for="name-{{ i }}">Name:</label>
+                        <input type="text" id="name-{{ i }}" formControlName="name" class="form-control" placeholder="Full Name">
+                        <div *ngIf="ticket.get('name')?.invalid && ticket.get('name')?.touched" class="invalid-feedback">
+                            Name is required.
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="dob-{{ i }}">Date of Birth:</label>
+                        <input type="date" id="dob-{{ i }}" formControlName="dob" class="form-control">
+                        <div *ngIf="ticket.get('dob')?.invalid && ticket.get('dob')?.touched" class="invalid-feedback">
+                            Date of Birth is required.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-button" [disabled]="bookingForm.invalid || isLoading">
+                {{ isLoading ? 'Processing...' : 'Confirm Booking' }}
+            </button>
+        </form>
+
+        <div *ngIf="successMessage" class="alert alert-success mt-3">{{ successMessage }}</div>
+        <div *ngIf="errorMessage && !bookingForm.invalid" class="alert alert-danger mt-3">{{ errorMessage }}</div>
+
+    </ng-container>
+</div>

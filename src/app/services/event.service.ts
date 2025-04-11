@@ -1,99 +1,99 @@
+// src/app/services/event.service.ts
 import { Injectable } from '@angular/core';
-import { Observable, of } from 'rxjs'; // 'of' creates an Observable from static data
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Observable, throwError } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
 import { Event } from '../models/event.model';
+
+// Define an interface for the booking payload
+export interface BookingPayload {
+    eventId: number;
+    tickets: { name: string; dob: string }[];
+}
+
+// Define an interface for the booking response (adjust as needed based on backend)
+export interface BookingResponse {
+    success: boolean;
+    message: string;
+    bookingIds?: number[]; // Optional: backend might return generated IDs
+}
+
 
 @Injectable({
   providedIn: 'root'
 })
 export class EventService {
+  private apiUrl = 'http://localhost:5001/api'; // <-- NEW (CORS)
 
-  private hardcodedEvents: Event[] = [
-    {
-      id: 1,
-      name: "Tech Innovators Conference",
-      date: "2025-06-15",
-      location: "Bangalore, Karnataka",
-      description: "A gathering of tech leaders discussing the future of AI, blockchain, and software development.",
-      price: 2999
-    },
-    {
-      id: 2,
-      name: "NH7 Weekender Music Festival",
-      date: "2025-07-20",
-      location: "Pune, Maharashtra",
-      description: "India’s happiest music festival featuring top indie and international artists.",
-      price: 2500
-    },
-    {
-      id: 3,
-      name: "Arijit Singh Live",
-      date: "2025-09-10",
-      location: "Mumbai, Maharashtra",
-      description: "A soulful evening with Arijit Singh performing his greatest hits.",
-      price: 3500
-    },
-    {
-      id: 4,
-      name: "Comic Con India",
-      date: "2025-08-05",
-      location: "Delhi",
-      description: "A massive pop culture convention featuring comics, movies, video games, and celebrity panels.",
-      price: 1500
-    },
-    {
-      id: 5,
-      name: "Sunburn Music Festival",
-      date: "2025-10-12",
-      location: "Goa",
-      description: "Asia’s biggest electronic music festival with top DJs from around the world.",
-      price: 4000
-    },
-    {
-      id: 6,
-      name: "India Food & Wine Festival",
-      date: "2025-11-03",
-      location: "Jaipur, Rajasthan",
-      description: "A celebration of India's rich culinary heritage with global influences.",
-      price: 1800
-    },
-    {
-      id: 7,
-      name: "Shreya Ghoshal Live",
-      date: "2025-08-25",
-      location: "Hyderabad, Telangana",
-      description: "A mesmerizing night with the queen of Indian playback singing.",
-      price: 2800
-    },
-    {
-      id: 8,
-      name: "Christmas Carnival",
-      date: "2025-12-25",
-      location: "Kolkata, West Bengal",
-      description: "A festive celebration with music, food, and holiday cheer at Park Street.",
-      price: 1000
-    }
-  ];
+  constructor(private http: HttpClient) { }
 
-  constructor() { }
-
+  // --- Event Fetching (Should already be using HttpClient) ---
   getEvents(): Observable<Event[]> {
-    console.log('EventService: fetching hardcoded events');
-    // 'of' simulates an HTTP response with the hardcoded data
-    return of(this.hardcodedEvents);
+    console.log('EventService: fetching events from backend API');
+    return this.http.get<Event[]>(`${this.apiUrl}/events`)
+      .pipe(
+        tap(events => console.log('Fetched events:', events)),
+        catchError(this.handleError)
+      );
   }
 
-  // Method to get a single event by ID (returns an Observable)
   getEventById(id: number): Observable<Event | undefined> {
-    console.log(`EventService: fetching event with id=${id}`);
-    const event = this.hardcodedEvents.find(e => e.id === id);
-    return of(event); // Returns Observable<Event> or Observable<undefined>
+    console.log(`EventService: fetching event with id=${id} from backend API`);
+    return this.http.get<Event>(`${this.apiUrl}/events/${id}`)
+      .pipe(
+        tap(event => console.log(`Workspaceed event id=${id}:`, event)),
+        catchError(this.handleError)
+      );
   }
 
-  // Placeholder for booking logic (will interact with backend later)
-  bookEvent(eventId: number, bookingDetails: any): Observable<any> {
-    console.log(`Booking event ${eventId} with details:`, bookingDetails);
-    // In a real app, this would make an HTTP POST request
-    // For now, just return a success simulation
-    return of({ success: true, message: `Event ${eventId} booked (simulated).` });
+  // --- New Booking Method ---
+  confirmBooking(bookingData: BookingPayload): Observable<BookingResponse> {
+      console.log('EventService: sending booking confirmation to backend');
+      return this.http.post<BookingResponse>(`${this.apiUrl}/bookings`, bookingData)
+          .pipe(
+              tap(response => console.log('Booking response from backend:', response)),
+              catchError(this.handleError)
+          );
   }
+
+  // --- REMOVE OLD bookEvent method ---
+  /*
+  bookEvent(eventId: number, bookingDetails: any): Observable<any> { ... }
+  */
+
+  // --- Error Handling ---
+  private handleError(error: HttpErrorResponse): Observable<never> {
+    let errorMessage = 'An unknown error occurred!';
+    // Default user-friendly message
+    let userFriendlyMessage = 'An error occurred while processing your request. Please try again later.';
+
+    // Check if running in a browser environment first before using ErrorEvent
+    if (typeof ErrorEvent !== 'undefined' && error.error instanceof ErrorEvent) {
+        // Client-side or network error (e.g., CORS preflight failure, network down)
+        errorMessage = `Client Error/Network Error: ${error.message}`; // Use error.message
+        userFriendlyMessage = `Could not reach the server. Please check your network connection. (${error.message})`;
+    }
+    // Check specifically for status 0, often indicating CORS or network issues before a server response
+    else if (error.status === 0) {
+        errorMessage = `Client Error/Network Error: Status 0 - Possibly CORS or Network issue. Message: ${error.message}`;
+        userFriendlyMessage = `Could not connect to the server. Please check your network connection or contact support.`;
+    }
+    // Otherwise, assume it's a backend error response
+    else {
+        // Backend returned an unsuccessful response code.
+        errorMessage = `Server Error: Status ${error.status}, Body: ${JSON.stringify(error.error)}`;
+        // Try to get a more specific message from the backend response
+        if (error.error && typeof error.error === 'object' && error.error.message) {
+            userFriendlyMessage = `Server Error: ${error.error.message}`; // Use backend's message
+        } else if (error.statusText) {
+            userFriendlyMessage = `Server Error ${error.status}: ${error.statusText}`;
+        } else {
+            userFriendlyMessage = `An unexpected error occurred on the server (Status: ${error.status}).`;
+        }
+    }
+
+    console.error('handleError details:', errorMessage); // Log detailed error for debugging
+    // Return an observable with a user-facing error message wrapped in an Error object
+    return throwError(() => new Error(userFriendlyMessage));
+}
 }

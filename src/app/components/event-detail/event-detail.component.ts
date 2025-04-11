@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router'; // Import Router
 import { EventService } from '../../services/event.service';
 import { Event } from '../../models/event.model';
 import { switchMap } from 'rxjs/operators';
-import { Observable, of } from 'rxjs'; // Import 'of'
+import { Observable, of } from 'rxjs';
 
 @Component({
   selector: 'app-event-detail',
@@ -13,8 +13,8 @@ import { Observable, of } from 'rxjs'; // Import 'of'
   styleUrls: ['./event-detail.component.css']
 })
 export class EventDetailComponent implements OnInit {
-  event$: Observable<Event | undefined> = of(undefined); // Initialize with an Observable
-  bookingMessage: string | null = null;
+  event$: Observable<Event | undefined> = of(undefined);
+  // bookingMessage: string | null = null; // REMOVE
 
   constructor(
     private route: ActivatedRoute,
@@ -23,43 +23,37 @@ export class EventDetailComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
+    // Keep this logic to fetch event details
     this.event$ = this.route.paramMap.pipe(
       switchMap(params => {
         const idParam = params.get('id');
-        const eventId = idParam ? +idParam : 0; // Convert string 'id' to a number
+        const eventId = idParam ? +idParam : 0;
         if (eventId > 0) {
-          console.log(`EventDetailComponent: Fetching event with id=${eventId}`);
           return this.eventService.getEventById(eventId);
         } else {
-          console.error('EventDetailComponent: Invalid event ID');
-          // Handle invalid ID, maybe navigate back or show error
-          return of(undefined); // Return an Observable of undefined
+          this.router.navigate(['/events']); // Redirect if ID is invalid
+          return of(undefined);
         }
       })
     );
   }
 
-  // Simple booking simulation
-  bookNow(eventId: number | undefined): void {
-    if (eventId === undefined) {
-      this.bookingMessage = "Cannot book: Event ID is missing.";
-      return;
+  // Method to navigate to the booking form
+  navigateToBooking(eventId: number | undefined): void {
+    if (eventId !== undefined) {
+      this.router.navigate(['/events', eventId, 'book']);
+    } else {
+        console.error("Cannot navigate to booking: Event ID is missing.");
+        // Optionally show an error message to the user
     }
-    // In a real app, you might collect user details here
-    const bookingDetails = { user: 'Test User', email: 'test@example.com' };
-
-    this.eventService.bookEvent(eventId, bookingDetails).subscribe(response => {
-      console.log('Booking response:', response);
-      this.bookingMessage = response.success ? response.message : 'Booking failed (simulated).';
-      // Optionally navigate away after booking
-      // setTimeout(() => this.router.navigate(['/events']), 3000); // Go back to list after 3s
-    }, error => {
-      console.error('Booking error:', error);
-      this.bookingMessage = 'An error occurred during booking (simulated).';
-    });
   }
 
   goBack(): void {
-    this.router.navigate(['/events']); // Navigate back to the event list
+    this.router.navigate(['/events']);
   }
+
+   // REMOVE the old bookNow method
+   /*
+   bookNow(eventId: number | undefined): void { ... }
+   */
 }
