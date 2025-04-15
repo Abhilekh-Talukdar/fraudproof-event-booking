@@ -23,7 +23,7 @@ export interface BookingResponse {
   providedIn: 'root'
 })
 export class EventService {
-  private apiUrl = 'http://localhost:5001/api'; // <-- NEW (CORS)
+  private apiUrl = '/api'; // <-- NEW (CORS)
 
   constructor(private http: HttpClient) { }
 
