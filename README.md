@@ -1,59 +1,21 @@
-# FraudproofEventBooking
+# Fraudproof Event Booking Application
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.0.6.
+A web application for browsing upcoming events and booking tickets. Built with an Angular frontend (utilizing Server-Side Rendering - SSR) and a Python Flask backend, using SQLite for simple data storage.
 
-## Development server
+## Features
 
-To start a local development server, run:
+* View a list of available events fetched from the backend API.
+* See detailed information for each event.
+* Book 1 to 4 tickets for an event.
+* Enter Name and Date of Birth for each ticket being booked.
+* Booking details are stored in the backend database.
 
-```bash
-ng serve
-```
+## Technologies Used
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+* **Frontend:** Angular (~17/18+), TypeScript, HTML, CSS
+* **Backend:** Python 3, Flask
+* **Database:** SQLite 3
+* **API Communication:** RESTful API, CORS (for local development)
+* **Node.js/npm:** For Angular development and building
+* **Python Virtual Environment (`venv`):** For backend dependency management
+* **(Deployment):** Gunicorn (WSGI Server), Nginx (Reverse Proxy), Systemd (Process Management), Angular SSR Node Server, Linux (GCP)
