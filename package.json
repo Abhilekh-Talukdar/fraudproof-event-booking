@@ -52,6 +52,7 @@
     "postcss": "^8.5.29",
     "micromatch": "^4.0.8",
     "fast-glob": "^3.3.3",
-    "pacote": "^22.0.0"
+    "pacote": "^22.0.0",
+    "http-proxy-middleware": "^3.0.7"
   }
 }
