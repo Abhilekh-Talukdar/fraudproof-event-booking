@@ -1,0 +1,5 @@
+.auth-card { max-width: 28rem; margin: 3rem auto; padding: 2rem; border: 1px solid #d9dce2; border-radius: .75rem; background: #fff; }
+.auth-card form { display: grid; gap: .6rem; }
+.auth-card input { padding: .65rem; border: 1px solid #b8bec9; border-radius: .3rem; }
+.error { color: #b42318; }
+.link-button { margin-top: 1rem; border: 0; background: transparent; color: #155eef; cursor: pointer; }

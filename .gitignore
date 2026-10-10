@@ -41,5 +41,16 @@ testem.log
 .DS_Store
 Thumbs.db
 
-#venv
+# Python
 backend/venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+backend/instance/
+*.db
+
+# Local application secrets
+.env
+

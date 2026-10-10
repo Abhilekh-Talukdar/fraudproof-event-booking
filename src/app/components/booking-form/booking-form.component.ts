@@ -20,6 +20,8 @@ export class BookingFormComponent implements OnInit, OnDestroy {
   isLoading = false;
   errorMessage: string | null = null;
   successMessage: string | null = null;
+  pendingReservation: { id: string; expiresAt: string } | null = null;
+  issuedTickets: { id: string; holderName: string | null; token: string }[] = [];
   maxTickets = 4; // Max tickets allowed
   numberOfTicketsOptions = Array.from({ length: this.maxTickets }, (_, i) => i + 1); // [1, 2, 3, 4]
 
@@ -109,8 +111,7 @@ export class BookingFormComponent implements OnInit, OnDestroy {
   // Create a FormGroup for a single ticket
   createTicketForm(): FormGroup {
     return this.fb.group({
-      name: ['', Validators.required],
-      dob: ['', Validators.required] // Date of Birth
+      name: ['', Validators.required]
     });
   }
 
@@ -138,17 +139,47 @@ export class BookingFormComponent implements OnInit, OnDestroy {
         console.log('Booking successful:', response);
         this.isLoading = false;
         this.successMessage = response.message || 'Booking successful!';
-        // Optionally clear form or disable it
-        this.bookingForm.reset({ numberOfTickets: 1 }); // Reset form
-        this.ticketsFormArray.clear(); // Clear the dynamic array
-        this.updateTicketForms(1); // Re-add one form group
-        // Optionally navigate away after a delay
-         setTimeout(() => this.router.navigate(['/events']), 5000); // Go back to list after 5s
+        if (response.reservation) {
+          this.pendingReservation = {
+            id: response.reservation.reservationId,
+            expiresAt: response.reservation.expiresAt
+          };
+        }
       },
       error: (err) => {
         console.error('Booking failed:', err);
         this.isLoading = false;
         this.errorMessage = `Booking failed: ${err.message || 'Please try again.'}`;
+      }
+    });
+  }
+
+  completeMockPayment(outcome: 'APPROVED' | 'DECLINED'): void {
+    if (!this.pendingReservation) {
+      return;
+    }
+    this.isLoading = true;
+    this.errorMessage = null;
+    const paymentKey = crypto.randomUUID();
+    this.eventService.completeMockPayment(this.pendingReservation.id, outcome, paymentKey).subscribe({
+      next: (response) => {
+        this.isLoading = false;
+        this.pendingReservation = null;
+        this.successMessage = response.status === 'PAID'
+          ? `Mock payment approved. Order ${response.orderId} is confirmed.`
+          : 'Mock payment was declined and the reservation was released.';
+        this.issuedTickets = (response.tickets || []).map(ticket => ({
+          id: ticket.ticketId,
+          holderName: ticket.holderName,
+          token: ticket.token
+        }));
+        this.bookingForm.reset({ numberOfTickets: 1 });
+        this.ticketsFormArray.clear();
+        this.updateTicketForms(1);
+      },
+      error: (err) => {
+        this.isLoading = false;
+        this.errorMessage = `Payment could not be completed: ${err.message || 'Please try again.'}`;
       }
     });
   }

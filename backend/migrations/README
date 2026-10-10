@@ -1,0 +1,9 @@
+Database migrations are managed by Flask-Migrate/Alembic.
+
+Apply the committed schema with:
+
+    flask --app app:create_app db upgrade
+
+Create a reviewed migration after model changes with:
+
+    flask --app app:create_app db migrate -m "describe change"

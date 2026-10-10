@@ -3,11 +3,13 @@ import { RouterModule, Routes } from '@angular/router';
 import { EventListComponent } from './components/event-list/event-list.component';
 import { EventDetailComponent } from './components/event-detail/event-detail.component';
 import { BookingFormComponent } from './components/booking-form/booking-form.component';
+import { LoginComponent } from './components/login/login.component';
 
 const routes: Routes = [
   { path: 'events', component: EventListComponent },
   { path: 'events/:id', component: EventDetailComponent },
   { path: 'events/:id/book', component: BookingFormComponent }, // <-- New route for booking
+  { path: 'login', component: LoginComponent },
   { path: '', redirectTo: '/events', pathMatch: 'full' },
   { path: '**', redirectTo: '/events' }
 ];

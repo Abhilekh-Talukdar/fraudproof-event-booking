@@ -1,6 +1,9 @@
 <nav class="navbar">
-    <a class="navbar-brand" routerLink="/">Event Booker</a>
+    <a class="navbar-brand" routerLink="/">FraudProof</a>
     <ul class="navbar-links">
         <li><a routerLink="/events" routerLinkActive="active-link">Events</a></li>
+        <li *ngIf="user$ | async as user"><span>{{ user.email }} · {{ user.role }}</span></li>
+        <li *ngIf="user$ | async; else signIn"><button type="button" (click)="logout()">Sign out</button></li>
+        <ng-template #signIn><li><a routerLink="/login">Sign in</a></li></ng-template>
     </ul>
 </nav>

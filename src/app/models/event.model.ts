@@ -5,4 +5,6 @@ export interface Event {
     location: string;
     description: string;
     price?: number; // Optional price
+    availability?: number;
+    startsAt?: string;
   }

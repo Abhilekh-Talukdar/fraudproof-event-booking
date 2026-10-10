@@ -8,16 +8,41 @@ import { Event } from '../models/event.model';
 // Define an interface for the booking payload
 export interface BookingPayload {
     eventId: number;
-    tickets: { name: string; dob: string }[];
+    tickets: { name: string }[];
 }
 
 // Define an interface for the booking response (adjust as needed based on backend)
 export interface BookingResponse {
     success: boolean;
     message: string;
-    bookingIds?: number[]; // Optional: backend might return generated IDs
+    reservation?: ReservationResponse;
 }
 
+export interface ReservationResponse {
+  reservationId: string;
+  eventId: number;
+  quantity: number;
+  status: 'HELD' | 'CONFIRMED' | 'RELEASED';
+  expiresAt: string;
+}
+
+export interface MockPaymentResponse {
+  orderId: string;
+  reservationId: string;
+  status: 'PAID' | 'PAYMENT_FAILED';
+  amount: number;
+  currency: string;
+  paymentReference: string;
+  tickets?: IssuedTicket[];
+}
+
+export interface IssuedTicket {
+  ticketId: string;
+  holderName: string | null;
+  status: 'ISSUED' | 'USED' | 'REVOKED';
+  expiresAt: string;
+  token: string;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -49,11 +74,22 @@ export class EventService {
   // --- New Booking Method ---
   confirmBooking(bookingData: BookingPayload): Observable<BookingResponse> {
       console.log('EventService: sending booking confirmation to backend');
-      return this.http.post<BookingResponse>(`${this.apiUrl}/bookings`, bookingData)
+      const idempotencyKey = crypto.randomUUID();
+      return this.http.post<BookingResponse>(`${this.apiUrl}/bookings`, bookingData, {
+        headers: { 'Idempotency-Key': idempotencyKey }
+      })
           .pipe(
               tap(response => console.log('Booking response from backend:', response)),
               catchError(this.handleError)
           );
+  }
+
+  completeMockPayment(reservationId: string, outcome: 'APPROVED' | 'DECLINED', idempotencyKey: string): Observable<MockPaymentResponse> {
+    return this.http.post<MockPaymentResponse>(
+      `${this.apiUrl}/reservations/${reservationId}/mock-payment`,
+      { outcome },
+      { headers: { 'Idempotency-Key': idempotencyKey } }
+    ).pipe(catchError(this.handleError));
   }
 
   // --- REMOVE OLD bookEvent method ---

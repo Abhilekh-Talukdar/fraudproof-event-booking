@@ -1,0 +1,78 @@
+import os
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+import pytest
+
+from app import db
+from app.models import Inventory, Reservation, ReservationStatus
+from app.services.reservations import InsufficientInventory, create_reservation
+from app.services.tickets import TicketRejected, verify_and_consume
+
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("FRAUDPROOF_TEST_DATABASE_URL", "").startswith("postgresql"),
+    reason="Requires an explicit disposable PostgreSQL test database.",
+)
+
+
+def test_one_hundred_competing_buyers_cannot_oversell(app, event_factory):
+    event_id = event_factory(capacity=10)
+    barrier = Barrier(100)
+
+    def reserve(index):
+        with app.app_context():
+            barrier.wait()
+            try:
+                create_reservation(event_id=event_id, quantity=1, idempotency_key=f"concurrent-{index}", ttl_seconds=300)
+                return "reserved"
+            except InsufficientInventory:
+                return "sold_out"
+            finally:
+                db.session.remove()
+
+    with ThreadPoolExecutor(max_workers=100) as executor:
+        outcomes = list(executor.map(reserve, range(100)))
+
+    assert outcomes.count("reserved") == 10
+    assert outcomes.count("sold_out") == 90
+    with app.app_context():
+        inventory = db.session.get(Inventory, event_id)
+        assert inventory.sold_quantity == 0
+        assert inventory.reserved_quantity == 10
+        assert inventory.available_quantity == 0
+        assert inventory.total_quantity == inventory.available_quantity + inventory.reserved_quantity + inventory.sold_quantity
+        assert db.session.query(Reservation).filter_by(status=ReservationStatus.HELD).count() == 10
+
+
+def test_two_concurrent_scans_admit_a_signed_ticket_exactly_once(app, client, event_factory):
+    event_id = event_factory(capacity=1)
+    reservation = client.post(
+        "/api/reservations",
+        json={"eventId": event_id, "quantity": 1, "attendeeNames": ["Scanner Test"]},
+        headers={"Idempotency-Key": "scan-reservation"},
+    ).json
+    payment = client.post(
+        f"/api/reservations/{reservation['reservationId']}/mock-payment",
+        json={"outcome": "APPROVED"},
+        headers={"Idempotency-Key": "scan-payment"},
+    ).json
+    token = payment["tickets"][0]["token"]
+    barrier = Barrier(2)
+
+    def scan():
+        with app.app_context():
+            barrier.wait()
+            try:
+                verify_and_consume(token=token, expected_event_id=event_id)
+                return "accepted"
+            except TicketRejected:
+                return "rejected"
+            finally:
+                db.session.remove()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(lambda _: scan(), range(2)))
+
+    assert outcomes.count("accepted") == 1
+    assert outcomes.count("rejected") == 1

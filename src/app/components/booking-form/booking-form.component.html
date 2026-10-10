@@ -10,7 +10,7 @@
         <p *ngIf="event.price"><strong>Price per ticket:</strong> ${{ event.price }}</p>
         <p *ngIf="!event.price"><strong>Price per ticket:</strong> Free</p>
 
-        <form [formGroup]="bookingForm" (ngSubmit)="onSubmit()">
+        <form *ngIf="!pendingReservation" [formGroup]="bookingForm" (ngSubmit)="onSubmit()">
             <div class="form-group">
                 <label for="numberOfTickets">Number of Tickets (Max {{ maxTickets }}):</label>
                 <select id="numberOfTickets" formControlName="numberOfTickets" class="form-control">
@@ -31,13 +31,6 @@
                             Name is required.
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label for="dob-{{ i }}">Date of Birth:</label>
-                        <input type="date" id="dob-{{ i }}" formControlName="dob" class="form-control">
-                        <div *ngIf="ticket.get('dob')?.invalid && ticket.get('dob')?.touched" class="invalid-feedback">
-                            Date of Birth is required.
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -45,6 +38,27 @@
                 {{ isLoading ? 'Processing...' : 'Confirm Booking' }}
             </button>
         </form>
+
+        <section *ngIf="pendingReservation" class="alert alert-success mt-3">
+            <h3>Reservation held</h3>
+            <p>Complete the mock payment before {{ pendingReservation.expiresAt | date:'short' }}.</p>
+            <button type="button" class="submit-button" [disabled]="isLoading" (click)="completeMockPayment('APPROVED')">
+                {{ isLoading ? 'Processing...' : 'Approve Mock Payment' }}
+            </button>
+            <button type="button" class="back-button" [disabled]="isLoading" (click)="completeMockPayment('DECLINED')">
+                Decline Mock Payment
+            </button>
+        </section>
+
+        <section *ngIf="issuedTickets.length" class="alert alert-success mt-3">
+            <h3>Signed tickets issued</h3>
+            <p>Each token is QR-ready. Keep it private; the verification API accepts it only once.</p>
+            <article *ngFor="let ticket of issuedTickets" class="ticket-form-group">
+                <strong>{{ ticket.holderName || 'Ticket holder' }}</strong>
+                <p>Ticket ID: {{ ticket.id }}</p>
+                <textarea class="form-control" readonly [value]="ticket.token" aria-label="Signed ticket token"></textarea>
+            </article>
+        </section>
 
         <div *ngIf="successMessage" class="alert alert-success mt-3">{{ successMessage }}</div>
         <div *ngIf="errorMessage && !bookingForm.invalid" class="alert alert-danger mt-3">{{ errorMessage }}</div>
