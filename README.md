@@ -6,7 +6,7 @@
 [![Redis 7](https://img.shields.io/badge/Redis-7-D82C20.svg)](https://redis.io)
 [![Tests Passing](https://img.shields.io/badge/pytest-33%20passed-brightgreen.svg)]()
 
-**FraudProof** is a production-grade event ticketing and booking system built to demonstrate **FAANG-caliber systems engineering patterns**: distributed concurrency safety, zero-overselling inventory invariants, idempotent request processing, cryptographic replay-proof ticket validation, rule-based abuse defense, and transactional outbox event dispatch.
+**FraudProof** is an event ticketing application built around a few backend problems that are easy to get wrong: allocating limited inventory under concurrency, handling request retries, issuing tickets that cannot be tampered with, and processing background events reliably.
 
 ---
 
@@ -49,8 +49,8 @@ graph TD
 ### 1. Atomic Inventory Reservations & Invariant Guarantees
 - **PostgreSQL Source of Truth**: Replaced naive database queries with atomic row-level locks (`SELECT ... FOR UPDATE`) and conditional decrements.
 - **Strict Conservation Law**: Enforces database-level check constraints ensuring `total_quantity = available_quantity + reserved_quantity + sold_quantity` at all times.
-- **TTL Reservation Holds**: Temporary 5-minute hold on ticket inventory; expired holds automatically release back to `available_quantity` without manual intervention or data corruption.
-- **Overselling Immunity**: Stress-tested against 100 concurrent competing buyers with zero partial allocations or oversold seats.
+- **Temporary Holds**: A reservation holds inventory for five minutes by default. Expired holds are released when the booking/payment paths process them.
+- **Concurrency Test**: A PostgreSQL-only test is included for 100 buyers competing for 10 tickets. It runs when `FRAUDPROOF_TEST_DATABASE_URL` points to a disposable PostgreSQL database.
 
 ### 2. End-to-End Persistent Idempotency
 - **Durable `IdempotencyRecord`**: Every critical mutation (`/api/reservations`, `/api/reservations/:id/mock-payment`) requires an `Idempotency-Key` header.
@@ -58,7 +58,7 @@ graph TD
 - **Safe Network Retries**: Retried client requests return the original exact response payload without consuming additional inventory or double-billing.
 
 ### 3. Cryptographically Signed Fraud-Proof Tickets
-- **HMAC-SHA256 Token Generation**: Issued tickets contain tamper-proof cryptographic signatures computed over ticket ID, event ID, user ID, and issue timestamp.
+- **HMAC-SHA256 Token Generation**: Each ticket token signs its ticket ID, event ID, order ID, version, timestamps, and nonce.
 - **Replay & Double-Spend Protection**: The verification API validates HMAC integrity before database lookup and atomically transitions tickets from `ISSUED` to `USED` in a single database transaction. Re-scans of the same QR code are immediately rejected.
 
 ### 4. Session Authentication & Role-Based Access Control (RBAC)
@@ -69,12 +69,12 @@ graph TD
 ### 5. Multi-Layer Abuse & Fraud Detection
 - **Rate Limiting**: Distributed rate-limiting via Flask-Limiter with Redis backend (protecting auth and booking endpoints).
 - **Rule-Based Cutoffs**: Blocks automated ticket-hoarding bots creating ≥ 50 reservations in a 1-hour rolling window before reaching the database lock layer.
-- **Durable Security Audit Log**: Audits all critical security actions (`user_registered`, `login_success`, `login_failed`, `abuse_blocked`) with client IP, user agent, and timestamp.
+- **Security Audit Log**: Records actions such as `user_registered`, `login_success`, `login_failed`, and `abuse_blocked`, along with the available user, IP, and timestamp details.
 
 ### 6. Transactional Outbox Pattern & Background Reliability
 - **Dual-Write Hazard Elimination**: Business mutations and event generation (`reservation.created`, `payment.confirmed`, `payment.declined`, `abuse.blocked`) are committed atomically within the same database transaction in the `outbox_events` table. If the business write rolls back, no orphaned event is emitted.
-- **Concurrent Safe Worker**: Background worker drains `PENDING` outbox events using PostgreSQL `FOR UPDATE SKIP LOCKED`, allowing horizontally scalable worker instances without duplicate event processing.
-- **Exponential Backoff & Retries**: Tracks retry counts up to `MAX_ATTEMPTS`, marking failed events as `FAILED` for dead-letter review.
+- **Worker Claims**: The worker claims `PENDING` events with PostgreSQL `FOR UPDATE SKIP LOCKED`, so concurrent workers do not claim the same pending row.
+- **Retries**: Failed handlers are retried on later worker cycles, up to `MAX_ATTEMPTS`. Events that reach the limit are marked `FAILED`. The current handlers log events; email or message-broker delivery is not wired up yet.
 
 ---
 
@@ -259,10 +259,10 @@ curl -i -X POST http://localhost:5001/api/reservations/<RESERVATION_ID>/mock-pay
 
 ### 4. Verify & Admit Ticket (Gate Scanner)
 ```bash
-curl -i -X POST http://localhost:5001/api/tickets/verify-and-consume \
+curl -i -X POST http://localhost:5001/api/tickets/verify \
   -b cookies.txt \
   -H 'Content-Type: application/json' \
-  -d '{"ticketPayload": "<SIGNED_TICKET_PAYLOAD>"}'
+  -d '{"token": "<SIGNED_TICKET_TOKEN>"}'
 ```
 *Admit ticket exactly once; replaying this payload returns `409 Ticket already consumed`.*
 
@@ -271,4 +271,4 @@ curl -i -X POST http://localhost:5001/api/tickets/verify-and-consume \
 ## Project Documentation
 - Detailed Design & Architecture Plan: [FRAUDPROOF_FAANG_PORTFOLIO_PLAN.md](FRAUDPROOF_FAANG_PORTFOLIO_PLAN.md)
 - Concurrency & Inventory Specifications: [docs/booking-concurrency.md](docs/booking-concurrency.md)
-- Threat Model & Ticket Verification: [docs/threat-model.md](docs/threat-model.md)
+- Design decisions: [docs/decisions/](docs/decisions/)
