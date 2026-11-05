@@ -1,13 +1,14 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from threading import Barrier, Lock
 
 import pytest
 
 from app import db
-from app.models import Inventory, Reservation, ReservationStatus
+from app.models import Inventory, OutboxEvent, OutboxEventStatus, Reservation, ReservationStatus
 from app.services.reservations import InsufficientInventory, create_reservation
 from app.services.tickets import TicketRejected, verify_and_consume
+from app.services.worker import register_handler, run_worker_cycle
 
 
 pytestmark = pytest.mark.skipif(
@@ -76,3 +77,50 @@ def test_two_concurrent_scans_admit_a_signed_ticket_exactly_once(app, client, ev
 
     assert outcomes.count("accepted") == 1
     assert outcomes.count("rejected") == 1
+
+
+
+def test_two_concurrent_workers_claim_distinct_outbox_events(app):
+    barrier = Barrier(2)
+    lock = Lock()
+    processed = []
+
+    def handler(event):
+        # Keep both worker calls in the handler at the same time. If claiming
+        # is not atomic, this can expose duplicate or missing work.
+        barrier.wait(timeout=15)
+        with lock:
+            processed.append(event.id)
+
+    with app.app_context():
+        register_handler("concurrent.worker_test", handler)
+        events = [
+            OutboxEvent(
+                event_type="concurrent.worker_test",
+                aggregate_id=f"worker-aggregate-{index}",
+                payload={"index": index},
+            )
+            for index in range(2)
+        ]
+        db.session.add_all(events)
+        db.session.commit()
+        expected_ids = {event.id for event in events}
+
+    def run_one_batch():
+        with app.app_context():
+            try:
+                return run_worker_cycle(batch_size=1)
+            finally:
+                db.session.remove()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: run_one_batch(), range(2)))
+
+    assert results == [1, 1]
+    assert set(processed) == expected_ids
+    assert len(processed) == len(expected_ids)
+
+    with app.app_context():
+        states = db.session.query(OutboxEvent).filter(OutboxEvent.id.in_(expected_ids)).all()
+        assert len(states) == 2
+        assert all(event.status == OutboxEventStatus.DONE for event in states)

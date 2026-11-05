@@ -16,7 +16,6 @@ depends_on = None
 
 def upgrade():
     order_status = sa.Enum("PAYMENT_PENDING", "PAID", "PAYMENT_FAILED", name="order_status")
-    order_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "orders",
         sa.Column("id", sa.String(length=36), nullable=False),

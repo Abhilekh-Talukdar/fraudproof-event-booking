@@ -289,3 +289,160 @@ def test_rolled_back_transaction_leaves_no_outbox_event(app):
 
         count = db.session.query(OutboxEvent).filter_by(aggregate_id="never-committed").count()
         assert count == 0
+
+
+
+# ---------------------------------------------------------------------------
+# Recoverable processing leases
+# ---------------------------------------------------------------------------
+
+def test_worker_recovers_an_expired_processing_claim(app):
+    received = []
+
+    def handler(event):
+        received.append(event.id)
+
+    with app.app_context():
+        register_handler("test.recover_stale", handler)
+        event = OutboxEvent(
+            event_type="test.recover_stale",
+            aggregate_id="agg-stale",
+            payload={},
+            status=OutboxEventStatus.PROCESSING,
+            attempts=1,
+            claimed_at=utcnow() - timedelta(minutes=2),
+            claim_token="previous-worker-token",
+        )
+        db.session.add(event)
+        db.session.commit()
+        event_id = event.id
+
+        done = run_worker_cycle(batch_size=10, lease_timeout_seconds=60)
+
+        recovered = db.session.get(OutboxEvent, event_id)
+        assert done == 1
+        assert received == [event_id]
+        assert recovered.status == OutboxEventStatus.DONE
+        assert recovered.attempts == 2
+        assert recovered.claimed_at is None
+        assert recovered.claim_token is None
+
+
+def test_worker_recovers_processing_rows_created_before_lease_support(app):
+    received = []
+
+    def handler(event):
+        received.append(event.id)
+
+    with app.app_context():
+        register_handler("test.recover_legacy", handler)
+        event = OutboxEvent(
+            event_type="test.recover_legacy",
+            aggregate_id="agg-legacy",
+            payload={},
+            status=OutboxEventStatus.PROCESSING,
+            attempts=1,
+            claimed_at=None,
+            claim_token=None,
+        )
+        db.session.add(event)
+        db.session.commit()
+        event_id = event.id
+
+        done = run_worker_cycle(batch_size=10, lease_timeout_seconds=60)
+
+        recovered = db.session.get(OutboxEvent, event_id)
+        assert done == 1
+        assert received == [event_id]
+        assert recovered.status == OutboxEventStatus.DONE
+
+
+def test_worker_leaves_a_live_processing_claim_alone(app):
+    received = []
+
+    def handler(event):
+        received.append(event.id)
+
+    with app.app_context():
+        register_handler("test.live_claim", handler)
+        event = OutboxEvent(
+            event_type="test.live_claim",
+            aggregate_id="agg-live",
+            payload={},
+            status=OutboxEventStatus.PROCESSING,
+            attempts=1,
+            claimed_at=utcnow(),
+            claim_token="active-worker-token",
+        )
+        db.session.add(event)
+        db.session.commit()
+        event_id = event.id
+
+        done = run_worker_cycle(batch_size=10, lease_timeout_seconds=60)
+
+        unchanged = db.session.get(OutboxEvent, event_id)
+        assert done == 0
+        assert received == []
+        assert unchanged.status == OutboxEventStatus.PROCESSING
+        assert unchanged.claim_token == "active-worker-token"
+
+
+def test_worker_fails_an_expired_claim_after_max_attempts(app):
+    with app.app_context():
+        event = OutboxEvent(
+            event_type="test.crashed_too_many_times",
+            aggregate_id="agg-exhausted",
+            payload={},
+            status=OutboxEventStatus.PROCESSING,
+            attempts=MAX_ATTEMPTS,
+            claimed_at=utcnow() - timedelta(minutes=2),
+            claim_token="last-worker-token",
+        )
+        db.session.add(event)
+        db.session.commit()
+        event_id = event.id
+
+        done = run_worker_cycle(batch_size=10, lease_timeout_seconds=60)
+
+        failed = db.session.get(OutboxEvent, event_id)
+        assert done == 0
+        assert failed.status == OutboxEventStatus.FAILED
+        assert "lease expired" in failed.last_error.lower()
+        assert failed.claimed_at is None
+        assert failed.claim_token is None
+
+
+def test_old_worker_cannot_finalize_a_replaced_claim(app):
+    def handler(event):
+        # Simulate another worker taking over after this worker's lease expires.
+        event.claim_token = "replacement-worker-token"
+        event.claimed_at = utcnow()
+        db.session.commit()
+
+    with app.app_context():
+        register_handler("test.replaced_claim", handler)
+        event = OutboxEvent(
+            event_type="test.replaced_claim",
+            aggregate_id="agg-replaced",
+            payload={},
+        )
+        db.session.add(event)
+        db.session.commit()
+        event_id = event.id
+
+        done = run_worker_cycle(batch_size=10)
+
+        current = db.session.get(OutboxEvent, event_id)
+        assert done == 0
+        assert current.status == OutboxEventStatus.PROCESSING
+        assert current.claim_token == "replacement-worker-token"
+
+
+def test_worker_rejects_invalid_batch_and_lease_values(app):
+    import pytest
+
+    with app.app_context():
+        with pytest.raises(ValueError, match="batch_size"):
+            run_worker_cycle(batch_size=0)
+        with pytest.raises(ValueError, match="lease_timeout_seconds"):
+            run_worker_cycle(lease_timeout_seconds=0)
