@@ -16,7 +16,6 @@ depends_on = None
 
 def upgrade():
     reservation_status = sa.Enum("HELD", "CONFIRMED", "RELEASED", name="reservation_status")
-    reservation_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "events",
         sa.Column("id", sa.Integer(), nullable=False),
