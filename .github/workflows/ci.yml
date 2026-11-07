@@ -95,8 +95,10 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Apply non-breaking npm audit fixes
-        run: npm audit fix --package-lock-only --ignore-scripts --no-fund
+      - name: Regenerate npm lockfile
+        run: |
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
       - name: Commit updated lockfile
         if: github.event_name == 'pull_request' && github.head_ref == 'security/refresh-vulnerable-npm-deps'
