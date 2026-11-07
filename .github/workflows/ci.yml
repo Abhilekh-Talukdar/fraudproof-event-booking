@@ -88,11 +88,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Check for high-severity dependency vulnerabilities
+        run: npm audit --audit-level=high
 
       - name: Build frontend
         run: npm run build
