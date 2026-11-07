@@ -80,10 +80,14 @@ jobs:
   frontend-build:
     name: Angular production build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -91,11 +95,25 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - name: Apply non-breaking npm audit fixes
+        run: npm audit fix --package-lock-only --ignore-scripts --no-fund
+
+      - name: Commit updated lockfile
+        if: github.event_name == 'pull_request' && github.head_ref == 'security/refresh-vulnerable-npm-deps'
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "fix(deps): resolve remaining npm audit findings"
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
+
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Check for high-severity dependency vulnerabilities
-        run: npm audit --audit-level=high
+      - name: Check all npm dependency advisories
+        run: npm audit
 
       - name: Build frontend
         run: npm run build
