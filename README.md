@@ -1,10 +1,10 @@
 # FraudProof — High-Concurrency, Fraud-Resistant Event Ticketing Platform
 
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org)
-[![Angular 19](https://img.shields.io/badge/Angular-19-red.svg)](https://angular.dev)
+[![Angular 21](https://img.shields.io/badge/Angular-19-red.svg)](https://angular.dev)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org)
 [![Redis 7](https://img.shields.io/badge/Redis-7-D82C20.svg)](https://redis.io)
-[![Tests Passing](https://img.shields.io/badge/pytest-33%20passed-brightgreen.svg)]()
+[![CI](https://github.com/Abhilekh-Talukdar/fraudproof-event-booking/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhilekh-Talukdar/fraudproof-event-booking/actions/workflows/ci.yml)
 
 **FraudProof** is an event ticketing application built around a few backend problems that are easy to get wrong: allocating limited inventory under concurrency, handling request retries, issuing tickets that cannot be tampered with, and processing background events reliably.
 
@@ -15,7 +15,7 @@
 ```mermaid
 graph TD
     subgraph Client Layer
-        A[Angular 19 SPA / SSR]
+        A[Angular 21 SPA / SSR]
         S[Door Scanner / Gate Staff]
     end
 
@@ -82,7 +82,7 @@ graph TD
 
 | Domain | Technology |
 |---|---|
-| **Frontend** | Angular 19, TypeScript, RxJS, Server-Side Rendering (SSR) |
+| **Frontend** | Angular 21, TypeScript, RxJS, Server-Side Rendering (SSR) |
 | **Backend** | Python 3.12, Flask, Flask-SQLAlchemy 3.x, Flask-Migrate, Flask-Limiter |
 | **Database** | PostgreSQL 16 (via `psycopg3` binary driver), SQLAlchemy 2.0 |
 | **Cache & Distributed State** | Redis 7 (rate limiting, locks) |
@@ -94,7 +94,7 @@ graph TD
 ## Getting Started
 
 ### Prerequisites
-- **Node.js**: v18+ (LTS recommended) and `npm`
+- **Node.js**: v22+ and `npm`
 - **Python**: 3.12+
 - **Docker & Docker Compose**
 
@@ -156,6 +156,14 @@ flask worker run --batch-size 50 --cycles 0
 ```
 *Processes outbox events continuously in the background.*
 
+**Terminal 3 — Reservation expiry cleanup (run on a schedule):**
+```bash
+cd backend
+source venv/bin/activate
+flask reservations expire --batch-size 1000
+```
+*Schedule this command with cron or a platform scheduler. Each invocation releases up to 1,000 expired holds; run it repeatedly to drain larger backlogs. Row-level locking allows concurrent cleanup jobs to share work safely.*
+
 ---
 
 ### Step 4: Run the Angular Frontend
@@ -178,49 +186,9 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-Output:
-```
-============================== test session starts ==============================
-collected 35 items
+The current results are reported by CI. CI also runs the PostgreSQL concurrency tests and an Angular production build.
 
-tests/test_abuse.py::test_register_rate_limit_enforced PASSED             [  2%]
-tests/test_abuse.py::test_login_rate_limit_enforced PASSED                [  5%]
-tests/test_abuse.py::test_rule_based_abuse_detection_blocks_after_50_reservations PASSED [  8%]
-tests/test_abuse.py::test_audit_log_written_on_successful_registration PASSED [ 11%]
-tests/test_abuse.py::test_audit_log_written_on_failed_login PASSED        [ 14%]
-tests/test_abuse.py::test_audit_log_written_on_successful_login PASSED    [ 17%]
-tests/test_abuse.py::test_audit_log_written_on_abuse_block PASSED         [ 20%]
-tests/test_auth.py::test_registration_creates_only_a_regular_user_and_session PASSED [ 22%]
-tests/test_auth.py::test_protected_reservation_requires_a_session PASSED  [ 25%]
-tests/test_auth.py::test_payment_cannot_be_completed_by_another_user PASSED [ 28%]
-tests/test_auth.py::test_idempotency_key_tied_to_user PASSED              [ 31%]
-tests/test_outbox.py::test_reservation_creates_outbox_event PASSED        [ 34%]
-tests/test_outbox.py::test_approved_payment_creates_outbox_event PASSED   [ 37%]
-tests/test_outbox.py::test_declined_payment_creates_outbox_event PASSED   [ 40%]
-tests/test_outbox.py::test_abuse_block_creates_outbox_event PASSED        [ 42%]
-tests/test_outbox.py::test_worker_processes_pending_event_to_done PASSED  [ 45%]
-tests/test_outbox.py::test_worker_marks_failed_after_max_attempts PASSED  [ 48%]
-tests/test_outbox.py::test_worker_does_not_reprocess_done_events PASSED   [ 51%]
-tests/test_outbox.py::test_worker_returns_zero_when_no_pending_events PASSED [ 54%]
-tests/test_outbox.py::test_worker_marks_unknown_event_type_as_failed PASSED [ 57%]
-tests/test_outbox.py::test_rolled_back_transaction_leaves_no_outbox_event PASSED [ 60%]
-tests/test_owner.py::test_reservation_tracks_authenticated_user_ownership PASSED [ 62%]
-tests/test_payments.py::test_approved_payment_converts_held_inventory_to_sold_once PASSED [ 65%]
-tests/test_payments.py::test_declined_payment_releases_hold_and_preserves_inventory_invariant PASSED [ 68%]
-tests/test_payments.py::test_expired_reservation_cannot_be_paid_and_inventory_is_restored PASSED [ 71%]
-tests/test_reservations.py::test_reservation_decrements_available_inventory_and_preserves_invariant PASSED [ 80%]
-tests/test_reservations.py::test_idempotent_retry_returns_original_hold_without_consuming_more_inventory PASSED [ 82%]
-tests/test_reservations.py::test_same_idempotency_key_with_changed_request_is_rejected PASSED [ 85%]
-tests/test_reservations.py::test_insufficient_inventory_does_not_create_a_partial_reservation PASSED [ 88%]
-tests/test_tickets.py::test_successful_payment_issues_signed_ticket_with_ticket_holder PASSED [ 91%]
-tests/test_tickets.py::test_valid_ticket_is_accepted_once_then_replay_is_rejected PASSED [ 94%]
-tests/test_tickets.py::test_tampered_ticket_payload_is_rejected_before_database_lookup PASSED [ 97%]
-tests/test_tickets.py::test_ticket_for_another_event_is_rejected_without_consumption PASSED [100%]
-
-======================== 33 passed, 2 skipped in 2.80s =========================
-```
-
-To run the live **100-concurrent-buyer PostgreSQL stress test**:
+To run the live/ **100-concurrent-buyer PostgreSQL stress test**:
 ```bash
 FRAUDPROOF_TEST_DATABASE_URL="postgresql+psycopg://fraudproof:fraudproof@localhost:5432/fraudproof" pytest tests/test_postgres_concurrency.py -v
 ```
