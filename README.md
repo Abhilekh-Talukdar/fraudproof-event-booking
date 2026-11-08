@@ -156,7 +156,7 @@ flask worker run --batch-size 50 --cycles 0
 ```
 *Processes outbox events continuously in the background.*
 
-**Terminal 3 — Reservation expiry cleanup (run on a schedule):**
+**Scheduled job — Reservation expiry cleanup:**
 ```bash
 cd backend
 source venv/bin/activate
