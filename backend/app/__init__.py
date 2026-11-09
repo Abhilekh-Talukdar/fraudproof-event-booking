@@ -59,6 +59,33 @@ def create_app(config_object: type[Config] = Config) -> Flask:
                 break
             time.sleep(1)
 
+    # ---------------------------------------------------------------------------
+    # Flask CLI: flask reservations expire [--batch-size N]
+    # ---------------------------------------------------------------------------
+    @app.cli.group()
+    def reservations():
+        """Reservation maintenance commands."""
+
+    @reservations.command("expire")
+    @click.option(
+        "--batch-size",
+        default=1000,
+        type=click.IntRange(min=1),
+        show_default=True,
+        help="Maximum expired holds to release in this invocation.",
+    )
+    def reservations_expire(batch_size: int):
+        """Release one bounded batch of expired reservation holds."""
+        from .services.reservations import release_expired_reservations
+
+        try:
+            released = release_expired_reservations(batch_size=batch_size)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        click.echo(f"Released {released} expired reservation(s).")
+
     @app.get("/healthz")
     def healthz():
         return jsonify({"status": "ok"})

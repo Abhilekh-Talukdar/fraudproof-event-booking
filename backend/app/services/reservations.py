@@ -46,19 +46,37 @@ def reservation_payload(reservation: Reservation) -> dict:
     }
 
 
-def release_expired_reservations() -> int:
-    """Release stale holds atomically; a scheduled worker will use this later."""
+def release_expired_reservations(*, batch_size: int | None = None) -> int:
+    """Release expired holds, optionally limiting the operation to one batch.
+
+    The row locks and skip-locked selection make concurrent cleanup processes
+    safe: each process only updates reservations it successfully claimed.
+    Callers own the surrounding transaction and must commit or roll it back.
+    """
+    if batch_size is not None and batch_size < 1:
+        raise ValueError("batch_size must be greater than zero")
+
     now = utcnow()
-    expired = db.session.execute(
-        select(Reservation).where(
+    statement = (
+        select(Reservation)
+        .where(
             Reservation.status == ReservationStatus.HELD,
             Reservation.expires_at <= now,
-        ).with_for_update()
-    ).scalars().all()
+        )
+        .order_by(Reservation.expires_at.asc(), Reservation.id.asc())
+        .with_for_update(skip_locked=True)
+    )
+    if batch_size is not None:
+        statement = statement.limit(batch_size)
+
+    expired = db.session.execute(statement).scalars().all()
     for reservation in expired:
-        db.session.execute(
+        result = db.session.execute(
             update(Inventory)
-            .where(Inventory.event_id == reservation.event_id)
+            .where(
+                Inventory.event_id == reservation.event_id,
+                Inventory.reserved_quantity >= reservation.quantity,
+            )
             .values(
                 available_quantity=Inventory.available_quantity + reservation.quantity,
                 reserved_quantity=Inventory.reserved_quantity - reservation.quantity,
@@ -66,6 +84,10 @@ def release_expired_reservations() -> int:
                 updated_at=now,
             )
         )
+        if result.rowcount != 1:
+            raise RuntimeError(
+                f"Inventory could not be released for expired reservation {reservation.id}."
+            )
         reservation.status = ReservationStatus.RELEASED
         reservation.updated_at = now
     return len(expired)
