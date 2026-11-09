@@ -446,3 +446,36 @@ def test_worker_rejects_invalid_batch_and_lease_values(app):
             run_worker_cycle(batch_size=0)
         with pytest.raises(ValueError, match="lease_timeout_seconds"):
             run_worker_cycle(lease_timeout_seconds=0)
+
+
+
+def test_register_handler_ignores_same_callable_but_keeps_distinct_handlers(app):
+    received = []
+
+    def first_handler(event):
+        received.append(("first", event.id))
+
+    def second_handler(event):
+        received.append(("second", event.id))
+
+    with app.app_context():
+        register_handler("test.registration_idempotency", first_handler)
+        register_handler("test.registration_idempotency", second_handler)
+        register_handler("test.registration_idempotency", first_handler)
+        db.session.add(OutboxEvent(
+            event_type="test.registration_idempotency",
+            aggregate_id="agg-registration-idempotency",
+            payload={},
+        ))
+        db.session.commit()
+
+        done = run_worker_cycle(batch_size=10)
+        event = db.session.query(OutboxEvent).filter_by(
+            event_type="test.registration_idempotency"
+        ).one()
+
+        assert done == 1
+        assert received == [
+            ("first", event.id),
+            ("second", event.id),
+        ]
