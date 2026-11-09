@@ -191,8 +191,7 @@ class OutboxEventStatus(str, Enum):
 
 
 class OutboxEvent(db.Model):
-    """Transactional outbox: events written atomically with business ops and
-    processed by a background worker exactly once."""
+    """Transactional outbox with at-least-once background delivery."""
     __tablename__ = "outbox_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -209,4 +208,6 @@ class OutboxEvent(db.Model):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow, index=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claim_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
 

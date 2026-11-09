@@ -16,7 +16,6 @@ depends_on = None
 
 def upgrade():
     ticket_status = sa.Enum("ISSUED", "USED", "REVOKED", name="ticket_status")
-    ticket_status.create(op.get_bind(), checkfirst=True)
     op.add_column("reservations", sa.Column("attendee_names", sa.JSON(), nullable=True))
     op.create_table(
         "tickets",

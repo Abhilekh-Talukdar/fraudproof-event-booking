@@ -19,7 +19,6 @@ depends_on = None
 
 def upgrade():
     outbox_status = sa.Enum("PENDING", "PROCESSING", "DONE", "FAILED", name="outbox_event_status")
-    outbox_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "outbox_events",
         sa.Column("id", sa.String(length=36), nullable=False),

@@ -1,142 +1,210 @@
-"""
-Transactional outbox — worker (read/process side).
+"""Transactional outbox worker with recoverable processing claims.
 
-Architecture
-------------
-* The worker claims a batch of PENDING events by marking them PROCESSING inside
-  a FOR UPDATE SKIP LOCKED transaction. This prevents two worker instances from
-  picking the same event, making it safe to run multiple workers concurrently.
-* Each event is dispatched to a registered handler by event_type.
-* On success the event is marked DONE.
-* On failure the attempt counter is incremented and last_error is recorded.
-  After MAX_ATTEMPTS the event is permanently marked FAILED.
-* Handlers are registered via the module-level registry; adding a new handler
-  is one line of code. The interface is thin so it can be replaced by a real
-  message broker (e.g. GCP Pub/Sub) without changing the business services.
+A worker commits its claim before invoking a handler. Claims have a lease so
+another worker can pick up an event if the original process disappears. Delivery
+is therefore at-least-once: handlers that perform external side effects must be
+idempotent.
 
-Usage (Flask CLI / APScheduler / Cloud Scheduler)
--------------------------------------------------
-    with app.app_context():
-        processed = run_worker_cycle(batch_size=50)
+The claim token acts as a fencing value. A worker whose lease has been replaced
+cannot update the event's final status when its handler eventually returns.
 """
 
 import logging
 import traceback
+from datetime import timedelta
 from typing import Callable
+from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 
 from .. import db
 from ..models import OutboxEvent, OutboxEventStatus, utcnow
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Handler registry
-# ---------------------------------------------------------------------------
-
 HandlerFn = Callable[[OutboxEvent], None]
 _handlers: dict[str, list[HandlerFn]] = {}
 
 MAX_ATTEMPTS = 5
+LEASE_TIMEOUT_SECONDS = 300
 
 
 def register_handler(event_type: str, fn: HandlerFn) -> None:
-    """Register a handler function for an event type.
-
-    Multiple handlers per event type are allowed; all are called in order.
-    This function is idempotent — registering the same function twice is a
-    no-op only if the caller avoids duplicates (module-level registration
-    naturally prevents this).
-    """
+    """Register a handler for an outbox event type."""
     _handlers.setdefault(event_type, []).append(fn)
 
 
-# ---------------------------------------------------------------------------
-# Worker cycle
-# ---------------------------------------------------------------------------
+def run_worker_cycle(
+    batch_size: int = 50,
+    lease_timeout_seconds: int = LEASE_TIMEOUT_SECONDS,
+) -> int:
+    """Claim and process a batch of pending or abandoned outbox events.
 
-def run_worker_cycle(batch_size: int = 50) -> int:
+    Returns the number of events successfully marked DONE. A PROCESSING row
+    with no claim timestamp is treated as a legacy abandoned claim, which lets
+    rows created before lease support recover on the first run after migration.
     """
-    Claim and process up to *batch_size* PENDING outbox events.
+    if batch_size < 1:
+        raise ValueError("batch_size must be greater than zero")
+    if lease_timeout_seconds < 1:
+        raise ValueError("lease_timeout_seconds must be greater than zero")
 
-    Returns the number of events successfully processed (marked DONE).
-    This function is safe to call from multiple concurrent workers thanks to
-    FOR UPDATE SKIP LOCKED.
-    """
     now = utcnow()
-
-    # Claim batch atomically
-    pending_rows = db.session.execute(
-        select(OutboxEvent)
-        .where(OutboxEvent.status == OutboxEventStatus.PENDING)
-        .order_by(OutboxEvent.created_at.asc())
-        .limit(batch_size)
-        .with_for_update(skip_locked=True)
-    ).scalars().all()
-
-    if not pending_rows:
-        return 0
-
-    # Mark all as PROCESSING in one UPDATE
-    ids = [e.id for e in pending_rows]
-    db.session.execute(
-        update(OutboxEvent)
-        .where(OutboxEvent.id.in_(ids))
-        .values(status=OutboxEventStatus.PROCESSING, attempts=OutboxEvent.attempts + 1)
+    lease_cutoff = now - timedelta(seconds=lease_timeout_seconds)
+    stale_claim = or_(
+        OutboxEvent.claimed_at.is_(None),
+        OutboxEvent.claimed_at <= lease_cutoff,
     )
-    db.session.commit()
+
+    # A crashed worker may have consumed the final attempt without recording
+    # a handler result. Do not dispatch it again after its lease expires.
+    try:
+        db.session.execute(
+            update(OutboxEvent)
+            .where(
+                OutboxEvent.status == OutboxEventStatus.PROCESSING,
+                OutboxEvent.attempts >= MAX_ATTEMPTS,
+                stale_claim,
+            )
+            .values(
+                status=OutboxEventStatus.FAILED,
+                last_error="Processing lease expired after maximum attempts",
+                processed_at=now,
+                claimed_at=None,
+                claim_token=None,
+            )
+            .execution_options(synchronize_session=False)
+        )
+
+        candidates = db.session.execute(
+            select(OutboxEvent)
+            .where(
+                OutboxEvent.attempts < MAX_ATTEMPTS,
+                or_(
+                    OutboxEvent.status == OutboxEventStatus.PENDING,
+                    and_(
+                        OutboxEvent.status == OutboxEventStatus.PROCESSING,
+                        stale_claim,
+                    ),
+                ),
+            )
+            .order_by(OutboxEvent.created_at.asc(), OutboxEvent.id.asc())
+            .limit(batch_size)
+            .with_for_update(skip_locked=True)
+        ).scalars().all()
+
+        claims: list[tuple[str, str, int]] = []
+        for event in candidates:
+            token = str(uuid4())
+            event.status = OutboxEventStatus.PROCESSING
+            event.attempts += 1
+            event.claimed_at = now
+            event.claim_token = token
+            claims.append((event.id, token, event.attempts))
+
+        # Persist the claim before calling handlers. A crash from this point on
+        # is recoverable after the lease expires.
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
 
     done_count = 0
-    for event in pending_rows:
-        # Re-fetch with current attempt count
-        event = db.session.get(OutboxEvent, event.id)
-        handlers = _handlers.get(event.event_type, [])
-
-        if not handlers:
-            logger.warning("outbox: no handler for event_type=%s id=%s", event.event_type, event.id)
-            # Treat missing handler as permanent failure — no retry loop needed.
-            event.status = OutboxEventStatus.FAILED
-            event.last_error = f"No handler registered for event_type '{event.event_type}'"
-            event.processed_at = utcnow()
-            db.session.commit()
+    for event_id, claim_token, attempt_number in claims:
+        # Re-read only while this worker still owns the claim. The token is
+        # captured locally so a later claim cannot be mistaken for ours.
+        event = db.session.execute(
+            select(OutboxEvent).where(
+                OutboxEvent.id == event_id,
+                OutboxEvent.status == OutboxEventStatus.PROCESSING,
+                OutboxEvent.claim_token == claim_token,
+            )
+        ).scalar_one_or_none()
+        if event is None:
             continue
 
-        success = True
+        handlers = _handlers.get(event.event_type, [])
+        if not handlers:
+            result = db.session.execute(
+                update(OutboxEvent)
+                .where(
+                    OutboxEvent.id == event_id,
+                    OutboxEvent.status == OutboxEventStatus.PROCESSING,
+                    OutboxEvent.claim_token == claim_token,
+                )
+                .values(
+                    status=OutboxEventStatus.FAILED,
+                    last_error=f"No handler registered for event_type '{event.event_type}'",
+                    processed_at=utcnow(),
+                    claimed_at=None,
+                    claim_token=None,
+                )
+            )
+            db.session.commit()
+            if result.rowcount != 1:
+                logger.info("outbox: claim was replaced before event id=%s could be failed", event_id)
+            continue
+
+        succeeded = True
+        error_text = None
         for handler in handlers:
             try:
                 handler(event)
             except Exception as exc:
-                success = False
-                error_text = traceback.format_exc()
+                succeeded = False
+                error_text = traceback.format_exc()[:4000]
                 logger.error(
                     "outbox: handler %s failed for event id=%s attempt=%d: %s",
-                    handler.__name__, event.id, event.attempts, exc,
+                    handler.__name__, event_id, attempt_number, exc,
                 )
-                event.last_error = error_text[:4000]  # cap to column size
-                break  # stop processing remaining handlers for this event
+                # A failed handler may have left the SQLAlchemy session in an
+                # error state. The claim was committed earlier, so it survives.
+                db.session.rollback()
+                break
 
-        now = utcnow()
-        if success:
-            event.status = OutboxEventStatus.DONE
-            event.processed_at = now
-            done_count += 1
-            logger.info("outbox: DONE event_type=%s id=%s", event.event_type, event.id)
-        elif event.attempts >= MAX_ATTEMPTS:
-            event.status = OutboxEventStatus.FAILED
-            event.processed_at = now
-            logger.error(
-                "outbox: FAILED permanently event_type=%s id=%s attempts=%d",
-                event.event_type, event.id, event.attempts,
-            )
+        finished_at = utcnow()
+        if succeeded:
+            final_status = OutboxEventStatus.DONE
+            processed_at = finished_at
+            last_error = None
+        elif attempt_number >= MAX_ATTEMPTS:
+            final_status = OutboxEventStatus.FAILED
+            processed_at = finished_at
+            last_error = error_text
         else:
-            # Revert to PENDING so the next cycle retries
-            event.status = OutboxEventStatus.PENDING
-            logger.warning(
-                "outbox: retry queued event_type=%s id=%s attempts=%d",
-                event.event_type, event.id, event.attempts,
-            )
+            final_status = OutboxEventStatus.PENDING
+            processed_at = None
+            last_error = error_text
 
+        result = db.session.execute(
+            update(OutboxEvent)
+            .where(
+                OutboxEvent.id == event_id,
+                OutboxEvent.status == OutboxEventStatus.PROCESSING,
+                OutboxEvent.claim_token == claim_token,
+            )
+            .values(
+                status=final_status,
+                last_error=last_error,
+                processed_at=processed_at,
+                claimed_at=None,
+                claim_token=None,
+            )
+        )
         db.session.commit()
+
+        if result.rowcount != 1:
+            logger.warning(
+                "outbox: claim lost before finalizing event id=%s; leaving the newer claim untouched",
+                event_id,
+            )
+            continue
+        if succeeded:
+            done_count += 1
+            logger.info("outbox: DONE event_type=%s id=%s", event.event_type, event_id)
+        elif final_status == OutboxEventStatus.FAILED:
+            logger.error("outbox: FAILED permanently event_type=%s id=%s attempts=%d", event.event_type, event_id, attempt_number)
+        else:
+            logger.warning("outbox: retry queued event_type=%s id=%s attempts=%d", event.event_type, event_id, attempt_number)
 
     return done_count

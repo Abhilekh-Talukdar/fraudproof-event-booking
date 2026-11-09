@@ -17,8 +17,6 @@ depends_on = None
 def upgrade():
     user_role = sa.Enum("USER", "ORGANIZER", "SCANNER", "ADMIN", name="user_role")
     user_status = sa.Enum("ACTIVE", "DISABLED", name="user_status")
-    user_role.create(op.get_bind(), checkfirst=True)
-    user_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "users",
         sa.Column("id", sa.String(length=36), nullable=False),
