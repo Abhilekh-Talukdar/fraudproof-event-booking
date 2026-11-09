@@ -9,8 +9,9 @@ The interface is intentionally thin so any handler can be replaced with a real
 external call (GCP Pub/Sub, SendGrid, etc.) without touching the business
 services or the worker.
 
-Registration is done at import time via worker.register_handler().
-Call register_all_handlers() once during app startup.
+Registration is done at app startup via worker.register_handler().
+The registry ignores repeat registration of the same callable, so app-factory
+reinitialization cannot add duplicate handler executions.
 """
 
 import logging

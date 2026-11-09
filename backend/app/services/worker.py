@@ -30,8 +30,10 @@ LEASE_TIMEOUT_SECONDS = 300
 
 
 def register_handler(event_type: str, fn: HandlerFn) -> None:
-    """Register a handler for an outbox event type."""
-    _handlers.setdefault(event_type, []).append(fn)
+    """Register a handler once while preserving distinct handlers per event type."""
+    handlers = _handlers.setdefault(event_type, [])
+    if all(existing is not fn for existing in handlers):
+        handlers.append(fn)
 
 
 def run_worker_cycle(
