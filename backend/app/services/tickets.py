@@ -120,7 +120,29 @@ def _decode_and_authenticate(token: str) -> dict:
     required = {"ticketId", "eventId", "orderId", "version", "issuedAt", "expiresAt", "nonce"}
     if not isinstance(payload, dict) or set(payload) != required:
         raise InvalidTicket("Ticket payload is invalid.")
-    if not isinstance(payload["ticketId"], str) or not isinstance(payload["eventId"], int) or not isinstance(payload["version"], int):
+    ticket_id = payload["ticketId"]
+    event_id = payload["eventId"]
+    order_id = payload["orderId"]
+    version = payload["version"]
+    issued_at = payload["issuedAt"]
+    expires_at = payload["expiresAt"]
+    nonce = payload["nonce"]
+
+    # bool is a subclass of int in Python, but it is not a valid JSON integer
+    # for an identifier, version, or Unix timestamp in this token schema.
+    is_integer = lambda value: isinstance(value, int) and not isinstance(value, bool)
+    valid_strings = (
+        isinstance(ticket_id, str) and 0 < len(ticket_id) <= 36 and ticket_id.strip(),
+        isinstance(order_id, str) and 0 < len(order_id) <= 36 and order_id.strip(),
+        isinstance(nonce, str) and 0 < len(nonce) <= 64 and nonce.strip(),
+    )
+    valid_integers = (
+        is_integer(event_id) and event_id > 0,
+        is_integer(version) and version > 0,
+        is_integer(issued_at) and issued_at > 0,
+        is_integer(expires_at) and expires_at > 0,
+    )
+    if not all(valid_strings) or not all(valid_integers) or expires_at < issued_at:
         raise InvalidTicket("Ticket payload has invalid fields.")
     return payload
 
