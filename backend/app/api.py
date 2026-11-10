@@ -195,8 +195,12 @@ def verify_ticket():
     expected_event_id = payload.get("expectedEventId")
     if not isinstance(token, str) or not token:
         return jsonify({"accepted": False, "error": "A ticket token is required."}), 400
-    if expected_event_id is not None and not isinstance(expected_event_id, int):
-        return jsonify({"accepted": False, "error": "expectedEventId must be an integer."}), 400
+    if expected_event_id is not None and (
+        not isinstance(expected_event_id, int)
+        or isinstance(expected_event_id, bool)
+        or expected_event_id < 1
+    ):
+        return jsonify({"accepted": False, "error": "expectedEventId must be a positive integer."}), 400
     try:
         return jsonify(verify_and_consume(token=token, expected_event_id=expected_event_id))
     except TicketError as error:
