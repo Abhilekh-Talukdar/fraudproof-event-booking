@@ -1,5 +1,9 @@
 import base64
+import hashlib
+import hmac
 import json
+
+import pytest
 
 from app import db
 from app.models import Ticket, TicketStatus
@@ -84,3 +88,81 @@ def test_ticket_for_another_event_is_rejected_without_consumption(client, app, e
     with app.app_context():
         ticket = db.session.query(Ticket).one()
         assert ticket.status == TicketStatus.ISSUED
+
+
+
+def sign_payload_for_test(app, payload):
+    """Create a correctly signed token so tests reach payload-schema validation."""
+    from flask import current_app
+
+    payload_bytes = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    with app.app_context():
+        secret = current_app.config["TICKET_SIGNING_SECRET"].encode("utf-8")
+    signature = hmac.new(secret, payload_bytes, hashlib.sha256).digest()
+    encoded_payload = base64.urlsafe_b64encode(payload_bytes).rstrip(b"=").decode("ascii")
+    encoded_signature = base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
+    return f"{encoded_payload}.{encoded_signature}"
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("ticketId", 123),
+        ("eventId", True),
+        ("orderId", None),
+        ("version", True),
+        ("issuedAt", "not-a-timestamp"),
+        ("expiresAt", "not-a-timestamp"),
+        ("nonce", []),
+    ],
+)
+def test_correctly_signed_ticket_with_invalid_field_types_is_rejected(
+    client, app, field, invalid_value
+):
+    payload = {
+        "ticketId": "ticket-placeholder",
+        "eventId": 1,
+        "orderId": "order-placeholder",
+        "version": 1,
+        "issuedAt": 1,
+        "expiresAt": 2,
+        "nonce": "nonce-placeholder",
+    }
+    payload[field] = invalid_value
+    token = sign_payload_for_test(app, payload)
+
+    response = verify(client, token)
+
+    assert response.status_code == 400
+    assert response.json["accepted"] is False
+    assert response.json["error"] == "invalid_ticket"
+
+
+def test_correctly_signed_ticket_with_expiry_before_issue_time_is_rejected(client, app):
+    payload = {
+        "ticketId": "ticket-placeholder",
+        "eventId": 1,
+        "orderId": "order-placeholder",
+        "version": 1,
+        "issuedAt": 200,
+        "expiresAt": 100,
+        "nonce": "nonce-placeholder",
+    }
+    token = sign_payload_for_test(app, payload)
+
+    response = verify(client, token)
+
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_ticket"
+
+
+def test_expected_event_id_rejects_boolean_values(client):
+    response = client.post(
+        "/api/tickets/verify",
+        json={"token": "not-a-token", "expectedEventId": True},
+    )
+
+    assert response.status_code == 400
+    assert response.json["error"] == "expectedEventId must be a positive integer."

@@ -110,7 +110,12 @@ def reserve_tickets():
     event_id = payload.get("eventId")
     quantity = payload.get("quantity")
     key = request.headers.get("Idempotency-Key")
-    if not isinstance(event_id, int) or not isinstance(quantity, int):
+    if (
+        not isinstance(event_id, int)
+        or isinstance(event_id, bool)
+        or not isinstance(quantity, int)
+        or isinstance(quantity, bool)
+    ):
         return jsonify({"error": "eventId and quantity must be integers."}), 400
     if not 1 <= quantity <= current_app.config["MAX_RESERVATION_QUANTITY"]:
         return jsonify({"error": "quantity is outside the allowed range."}), 400
@@ -195,8 +200,12 @@ def verify_ticket():
     expected_event_id = payload.get("expectedEventId")
     if not isinstance(token, str) or not token:
         return jsonify({"accepted": False, "error": "A ticket token is required."}), 400
-    if expected_event_id is not None and not isinstance(expected_event_id, int):
-        return jsonify({"accepted": False, "error": "expectedEventId must be an integer."}), 400
+    if expected_event_id is not None and (
+        not isinstance(expected_event_id, int)
+        or isinstance(expected_event_id, bool)
+        or expected_event_id < 1
+    ):
+        return jsonify({"accepted": False, "error": "expectedEventId must be a positive integer."}), 400
     try:
         return jsonify(verify_and_consume(token=token, expected_event_id=expected_event_id))
     except TicketError as error:
@@ -212,7 +221,7 @@ def compatibility_booking():
     if not isinstance(tickets, list) or not tickets:
         return jsonify({"success": False, "message": "A non-empty tickets array is required."}), 400
     event_id = payload.get("eventId")
-    if not isinstance(event_id, int):
+    if not isinstance(event_id, int) or isinstance(event_id, bool):
         return jsonify({"success": False, "message": "eventId must be an integer."}), 400
     if len(tickets) > current_app.config["MAX_RESERVATION_QUANTITY"]:
         return jsonify({"success": False, "message": "Too many tickets requested."}), 400
