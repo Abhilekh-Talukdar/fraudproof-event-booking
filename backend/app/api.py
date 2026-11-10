@@ -110,7 +110,12 @@ def reserve_tickets():
     event_id = payload.get("eventId")
     quantity = payload.get("quantity")
     key = request.headers.get("Idempotency-Key")
-    if not isinstance(event_id, int) or not isinstance(quantity, int):
+    if (
+        not isinstance(event_id, int)
+        or isinstance(event_id, bool)
+        or not isinstance(quantity, int)
+        or isinstance(quantity, bool)
+    ):
         return jsonify({"error": "eventId and quantity must be integers."}), 400
     if not 1 <= quantity <= current_app.config["MAX_RESERVATION_QUANTITY"]:
         return jsonify({"error": "quantity is outside the allowed range."}), 400
@@ -216,7 +221,7 @@ def compatibility_booking():
     if not isinstance(tickets, list) or not tickets:
         return jsonify({"success": False, "message": "A non-empty tickets array is required."}), 400
     event_id = payload.get("eventId")
-    if not isinstance(event_id, int):
+    if not isinstance(event_id, int) or isinstance(event_id, bool):
         return jsonify({"success": False, "message": "eventId must be an integer."}), 400
     if len(tickets) > current_app.config["MAX_RESERVATION_QUANTITY"]:
         return jsonify({"success": False, "message": "Too many tickets requested."}), 400
