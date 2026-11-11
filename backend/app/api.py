@@ -16,10 +16,16 @@ from .services.outbox import enqueue_event
 api = Blueprint("api", __name__)
 
 
+def _json_object() -> dict:
+    """Return a JSON object body, treating malformed or non-object JSON as empty."""
+    payload = request.get_json(silent=True)
+    return payload if isinstance(payload, dict) else {}
+
+
 @api.post("/auth/register")
 @limiter.limit("10 per minute")
 def register():
-    payload = request.get_json(silent=True) or {}
+    payload = _json_object()
     email = payload.get("email", "").strip().lower() if isinstance(payload.get("email"), str) else ""
     password = payload.get("password")
     if not email or "@" not in email or len(email) > 254:
@@ -44,7 +50,7 @@ def register():
 @api.post("/auth/login")
 @limiter.limit("20 per minute")
 def login():
-    payload = request.get_json(silent=True) or {}
+    payload = _json_object()
     email = payload.get("email", "").strip().lower() if isinstance(payload.get("email"), str) else ""
     password = payload.get("password")
     user = db.session.query(User).filter_by(email=email).one_or_none() if email else None
@@ -106,7 +112,7 @@ def get_event(event_id: int):
 @login_required
 @limiter.limit("20 per minute")
 def reserve_tickets():
-    payload = request.get_json(silent=True) or {}
+    payload = _json_object()
     event_id = payload.get("eventId")
     quantity = payload.get("quantity")
     key = request.headers.get("Idempotency-Key")
@@ -168,7 +174,7 @@ def reserve_tickets():
 @api.post("/reservations/<string:reservation_id>/mock-payment")
 @login_required
 def complete_mock_payment(reservation_id: str):
-    payload = request.get_json(silent=True) or {}
+    payload = _json_object()
     outcome = payload.get("outcome", "APPROVED")
     key = request.headers.get("Idempotency-Key")
     if outcome not in {"APPROVED", "DECLINED"}:
@@ -190,7 +196,7 @@ def complete_mock_payment(reservation_id: str):
 @api.post("/tickets/verify")
 @roles_required(UserRole.SCANNER, UserRole.ORGANIZER, UserRole.ADMIN)
 def verify_ticket():
-    payload = request.get_json(silent=True) or {}
+    payload = _json_object()
     token = payload.get("token")
     expected_event_id = payload.get("expectedEventId")
     if not isinstance(token, str) or not token:
@@ -207,7 +213,7 @@ def verify_ticket():
 @login_required
 def compatibility_booking():
     """Temporary bridge for the existing form; mock payment follows next."""
-    payload = request.get_json(silent=True) or {}
+    payload = _json_object()
     tickets = payload.get("tickets")
     if not isinstance(tickets, list) or not tickets:
         return jsonify({"success": False, "message": "A non-empty tickets array is required."}), 400
