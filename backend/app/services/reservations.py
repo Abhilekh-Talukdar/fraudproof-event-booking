@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import db
 from ..models import Event, IdempotencyRecord, Inventory, Reservation, ReservationStatus, utcnow
 from .outbox import enqueue_event
+from .idempotency import get_active_idempotency_record
 
 
 class ReservationError(Exception):
@@ -101,11 +102,11 @@ def _stored_response(record: IdempotencyRecord, fingerprint: str) -> tuple[dict,
 
 def create_reservation(*, event_id: int, quantity: int, idempotency_key: str, ttl_seconds: int, attendee_names: list[str] | None = None, user_id: str | None = None) -> tuple[dict, int]:
     fingerprint = request_fingerprint({"eventId": event_id, "quantity": quantity, "attendeeNames": attendee_names or [], "userId": user_id})
-    existing = db.session.execute(select(IdempotencyRecord).where(IdempotencyRecord.key == idempotency_key)).scalar_one_or_none()
+    now = utcnow()
+    existing = get_active_idempotency_record(IdempotencyRecord, idempotency_key, now=now)
     if existing:
         return _stored_response(existing, fingerprint)
 
-    now = utcnow()
     try:
         release_expired_reservations()
         event = db.session.get(Event, event_id)
@@ -164,7 +165,7 @@ def create_reservation(*, event_id: int, quantity: int, idempotency_key: str, tt
         raise
     except IntegrityError:
         db.session.rollback()
-        existing = db.session.execute(select(IdempotencyRecord).where(IdempotencyRecord.key == idempotency_key)).scalar_one_or_none()
+        existing = get_active_idempotency_record(IdempotencyRecord, idempotency_key, now=utcnow())
         if existing:
             return _stored_response(existing, fingerprint)
         raise
