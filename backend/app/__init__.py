@@ -86,6 +86,37 @@ def create_app(config_object: type[Config] = Config) -> Flask:
             raise
         click.echo(f"Released {released} expired reservation(s).")
 
+    # ---------------------------------------------------------------------------
+    # Flask CLI: flask idempotency purge [--batch-size N]
+    # ---------------------------------------------------------------------------
+    @app.cli.group()
+    def idempotency():
+        """Idempotency-key retention commands."""
+
+    @idempotency.command("purge")
+    @click.option(
+        "--batch-size",
+        default=1000,
+        type=click.IntRange(min=1),
+        show_default=True,
+        help="Maximum expired records to delete from each idempotency table.",
+    )
+    def idempotency_purge(batch_size: int):
+        """Delete one bounded batch of expired reservation and payment keys."""
+        from .services.idempotency import purge_expired_idempotency_records
+
+        try:
+            purged = purge_expired_idempotency_records(batch_size=batch_size)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        total = sum(purged.values())
+        click.echo(
+            f"Purged {total} expired idempotency record(s): "
+            f"{purged['reservations']} reservation and {purged['payments']} payment."
+        )
+
     @app.get("/healthz")
     def healthz():
         return jsonify({"status": "ok"})
