@@ -55,7 +55,7 @@ graph TD
 ### 2. End-to-End Persistent Idempotency
 - **Durable `IdempotencyRecord`**: Every critical mutation (`/api/reservations`, `/api/reservations/:id/mock-payment`) requires an `Idempotency-Key` header.
 - **Payload Fingerprinting**: SHA-256 fingerprinting ensures that replaying an identical key with a conflicting request payload is rejected with `409 Conflict`.
-- **Safe Network Retries**: Retried client requests return the original exact response payload without consuming additional inventory or double-billing.
+- **Safe Network Retries**: Retried client requests return the original exact response payload without consuming additional inventory or double-billing. Keys remain valid for 24 hours; after expiry they can be reused.
 
 ### 3. Cryptographically Signed Fraud-Proof Tickets
 - **HMAC-SHA256 Token Generation**: Each ticket token signs its ticket ID, event ID, order ID, version, timestamps, and nonce.
@@ -165,6 +165,14 @@ flask reservations expire --batch-size 1000
 *Schedule this command with cron or a platform scheduler. Each invocation releases up to 1,000 expired holds; run it repeatedly to drain larger backlogs. Row-level locking allows concurrent cleanup jobs to share work safely.*
 
 ---
+
+**Scheduled job — idempotency retention cleanup:**
+```bash
+cd backend
+source venv/bin/activate
+flask idempotency purge --batch-size 1000
+```
+*Deletes up to 1,000 expired reservation keys and 1,000 expired payment keys per invocation. Run it periodically with cron or a platform scheduler; active keys are retained.*
 
 ### Step 4: Run the Angular Frontend
 
