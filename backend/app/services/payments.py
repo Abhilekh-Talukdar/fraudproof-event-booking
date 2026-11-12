@@ -20,6 +20,7 @@ from ..models import (
 from .reservations import IdempotencyConflict, request_fingerprint, release_expired_reservations
 from .tickets import issue_tickets, ticket_payload
 from .outbox import enqueue_event
+from .idempotency import get_active_idempotency_record
 
 
 class PaymentError(Exception):
@@ -81,9 +82,7 @@ def _release_reservation(reservation: Reservation, now) -> None:
 
 def confirm_mock_payment(*, reservation_id: str, outcome: str, idempotency_key: str, user_id: str | None = None) -> tuple[dict, int]:
     fingerprint = request_fingerprint({"reservationId": reservation_id, "outcome": outcome, "userId": user_id})
-    existing = db.session.execute(
-        select(PaymentIdempotencyRecord).where(PaymentIdempotencyRecord.key == idempotency_key)
-    ).scalar_one_or_none()
+    existing = get_active_idempotency_record(PaymentIdempotencyRecord, idempotency_key, now=utcnow())
     if existing:
         return _stored_response(existing, fingerprint)
 
@@ -192,9 +191,7 @@ def confirm_mock_payment(*, reservation_id: str, outcome: str, idempotency_key: 
         raise
     except IntegrityError:
         db.session.rollback()
-        existing = db.session.execute(
-            select(PaymentIdempotencyRecord).where(PaymentIdempotencyRecord.key == idempotency_key)
-        ).scalar_one_or_none()
+        existing = get_active_idempotency_record(PaymentIdempotencyRecord, idempotency_key, now=utcnow())
         if existing:
             return _stored_response(existing, fingerprint)
         raise
