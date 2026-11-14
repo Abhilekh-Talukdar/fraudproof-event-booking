@@ -191,3 +191,14 @@ def test_audit_log_written_on_abuse_block(app, event_factory):
         log = db.session.query(AuditLog).filter_by(action="abuse_blocked").first()
         assert log is not None
         assert "Too many reservations" in log.details["reason"]
+
+def test_reservation_abuse_lookup_has_composite_index(app):
+    """The rolling per-user abuse query is indexed by user and creation time."""
+    with app.app_context():
+        table = Reservation.__table__
+        index = next(
+            index for index in table.indexes
+            if index.name == "ix_reservations_user_created_at"
+        )
+        assert [column.name for column in index.columns] == ["user_id", "created_at"]
+

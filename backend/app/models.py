@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Enum as SqlEnum, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, Enum as SqlEnum, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from . import db
@@ -93,6 +93,7 @@ class Reservation(db.Model):
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_reservation_quantity_positive"),
         CheckConstraint("status IN ('HELD', 'CONFIRMED', 'RELEASED')", name="ck_reservation_valid_status"),
+        Index("ix_reservations_user_created_at", "user_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
