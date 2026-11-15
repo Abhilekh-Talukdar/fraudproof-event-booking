@@ -130,3 +130,24 @@ def test_reservation_expiry_cli_releases_only_one_batch_at_a_time(client, app, e
         assert released == 2
         assert inventory.available_quantity == 2
         assert inventory.reserved_quantity == 0
+
+
+
+def test_reservation_rejects_boolean_event_id_and_quantity(client, event_factory):
+    event_id = event_factory()
+
+    boolean_event_id = reservation_request(client, True, 1, "boolean-event-id")
+    boolean_quantity = reservation_request(client, event_id, True, "boolean-quantity")
+
+    assert boolean_event_id.status_code == 400
+    assert boolean_quantity.status_code == 400
+
+
+def test_compatibility_booking_rejects_boolean_event_id(client):
+    response = client.post(
+        "/api/bookings",
+        json={"eventId": True, "tickets": [{"name": "Ada"}]},
+    )
+
+    assert response.status_code == 400
+    assert response.json["message"] == "eventId must be an integer."
