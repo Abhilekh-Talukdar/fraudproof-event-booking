@@ -116,6 +116,18 @@ def sign_payload_for_test(app, payload):
         ("issuedAt", "not-a-timestamp"),
         ("expiresAt", "not-a-timestamp"),
         ("nonce", []),
+        ("issuedAt", True),
+        ("expiresAt", True),
+        ("ticketId", ""),
+        ("ticketId", "t" * 37),
+        ("orderId", ""),
+        ("orderId", "o" * 37),
+        ("nonce", ""),
+        ("nonce", "n" * 65),
+        ("eventId", 0),
+        ("version", 0),
+        ("issuedAt", 0),
+        ("expiresAt", 0),
     ],
 )
 def test_correctly_signed_ticket_with_invalid_field_types_is_rejected(
