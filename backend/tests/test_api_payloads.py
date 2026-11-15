@@ -3,7 +3,8 @@ import json
 
 def test_mutation_endpoints_handle_non_object_json_without_server_errors(client):
     malformed_bodies = [
-        ("/api/auth/register", [], 400, {}),
+        ("/api/auth/register", ["unexpected"], 400, {}),
+        ("/api/auth/register", 123, 400, {}),
         ("/api/auth/login", "not-an-object", 401, {}),
         (
             "/api/reservations",
