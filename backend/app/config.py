@@ -1,6 +1,16 @@
 import os
 
 
+DEFAULT_CORS_ORIGINS = "http://localhost:4200"
+
+
+def parse_cors_origins(value: str | None = None) -> list[str]:
+    """Parse a comma-separated CORS allowlist without whitespace or blank entries."""
+    if value is None:
+        value = DEFAULT_CORS_ORIGINS
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "development-only-change-me")
     SQLALCHEMY_DATABASE_URI = os.environ.get(
@@ -8,7 +18,7 @@ class Config:
     )
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:4200").split(",")
+    CORS_ORIGINS = parse_cors_origins(os.environ.get("CORS_ORIGINS"))
     RESERVATION_TTL_SECONDS = int(os.environ.get("RESERVATION_TTL_SECONDS", "300"))
     MAX_RESERVATION_QUANTITY = int(os.environ.get("MAX_RESERVATION_QUANTITY", "4"))
     # Development default only. Production must inject this through Secret Manager.
