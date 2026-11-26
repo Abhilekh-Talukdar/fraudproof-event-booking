@@ -18,8 +18,26 @@ export class LoginComponent {
   constructor(private fb: FormBuilder, private auth: AuthService, private router: Router) {
     this.form = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(12)]]
+      // Existing accounts should be able to sign in regardless of the current
+      // registration password policy.
+      password: ['', [Validators.required]]
     });
+  }
+
+  setRegistrationMode(registering: boolean): void {
+    this.isRegistering = registering;
+    const password = this.form.get('password');
+    if (!password) {
+      return;
+    }
+
+    password.setValidators(
+      registering
+        ? [Validators.required, Validators.minLength(12)]
+        : [Validators.required]
+    );
+    password.updateValueAndValidity();
+    this.errorMessage = null;
   }
 
   submit(): void {
