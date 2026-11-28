@@ -136,6 +136,8 @@ This seeds 3 realistic demo events and creates two pre-configured demo accounts:
 - **Attendee:** `attendee@fraudproof.local` (Password: `fraudproof-demo-password`)
 - **Gate Scanner:** `scanner@fraudproof.local` (Password: `fraudproof-demo-password`)
 
+The API rejects request bodies larger than **1 MiB** by default with HTTP 413. Set `MAX_CONTENT_LENGTH` to a positive byte count to override this limit when a deployment genuinely needs larger payloads.
+
 ---
 
 ### Step 3: Run the Backend & Background Worker
@@ -213,7 +215,6 @@ curl -i -X POST http://localhost:5001/api/reservations \
   -H 'Idempotency-Key: resv-request-uuid-001' \
   -d '{"eventId": 1, "quantity": 2}'
 ```
-*Returns `201 Created` with `reservationId` and `expiresAt`.*
 
 ### 3. Settle Payment
 ```bash
