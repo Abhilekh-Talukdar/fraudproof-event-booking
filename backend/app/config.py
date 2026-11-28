@@ -9,6 +9,7 @@ class Config:
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:4200").split(",")
+    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", str(1024 * 1024)))
     RESERVATION_TTL_SECONDS = int(os.environ.get("RESERVATION_TTL_SECONDS", "300"))
     MAX_RESERVATION_QUANTITY = int(os.environ.get("MAX_RESERVATION_QUANTITY", "4"))
     # Development default only. Production must inject this through Secret Manager.
