@@ -15,6 +15,7 @@ class TestConfig:
     SQLALCHEMY_DATABASE_URI = os.environ.get("FRAUDPROOF_TEST_DATABASE_URL", "sqlite+pysqlite:///:memory:")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     CORS_ORIGINS = ["http://localhost:4200"]
+    MAX_CONTENT_LENGTH = 1024
     RESERVATION_TTL_SECONDS = 300
     MAX_RESERVATION_QUANTITY = 4
     TICKET_SIGNING_SECRET = "test-ticket-signing-secret"

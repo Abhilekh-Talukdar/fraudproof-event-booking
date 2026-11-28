@@ -90,4 +90,13 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     def healthz():
         return jsonify({"status": "ok"})
 
+    @app.errorhandler(413)
+    def request_too_large(_error):
+        return jsonify(
+            {
+                "error": "request_too_large",
+                "message": "Request body exceeds the configured size limit.",
+            }
+        ), 413
+
     return app
